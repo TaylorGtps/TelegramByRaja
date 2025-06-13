@@ -28,7 +28,7 @@ bot.command('antilink', (ctx) => {
   } else if (arg === 'off') {
     data.antiLink = false;
     saveData();
-    ctx.reply('❌ Anti-Link dimatikan.');
+    ctx.awaitreply('❌ Anti-Link dimatikan.');
   } else {
     ctx.reply('Format: /antilink on atau /antilink off');
   }
@@ -92,8 +92,10 @@ bot.on('message', async (ctx) => {
 
   if ((domainMatch || linkRegex.test(text)) && !isWhitelisted) {
     try {
-      await ctx.deleteMessage();
-      fs.appendFileSync('link-log.txt', `[${new Date().toLocaleString()}] ${fromUsername}: ${text}\n`);
+       await ctx.deleteMessage();
+       const notif = `❌ Pesan dari ${fromUsername} telah dihapus karena mengandung link:\n\n"${text}"`;
+       await ctx.reply(notif);
+       fs.appendFileSync('link-log.txt', `[${new Date().toLocaleString()}] ${fromUsername}: ${text}\n`);
       console.log(`❌ Dihapus: ${fromUsername}`);
     } catch (err) {
       console.error('⚠️ Gagal hapus:', err.message);
