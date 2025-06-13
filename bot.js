@@ -1,47 +1,107 @@
 const { Telegraf } = require('telegraf');
+const fs = require('fs');
 
 const bot = new Telegraf('7991511524:AAE1ReD73oQ7p8MRhLtj8UQZf8FxTA1OeG0');
 
-// Status Anti-Link (default: mati)
-let antiLinkOn = false;
+// Load data file
+let data = { allowedGroups: [], whitelist: [], domains: [], antiLink: false };
 
-// Perintah /start
+if (fs.existsSync('data.json')) {
+  data = JSON.parse(fs.readFileSync('data.json', 'utf-8'));
+}
+
+// Save data function
+const saveData = () => fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
+
+// /start
 bot.start((ctx) => {
-  ctx.reply('👋 Halo! Bot Anti-Link aktif. Gunakan /antilink on untuk mengaktifkan, /antilink off untuk mematikan.');
+  ctx.reply('🤖 Bot Anti-Link aktif!\nGunakan /antilink on/off\nGunakan /izinkan di grup target');
 });
 
-// Perintah /antilink on
+// /antilink on|off
 bot.command('antilink', (ctx) => {
   const arg = ctx.message.text.split(' ')[1];
   if (arg === 'on') {
-    antiLinkOn = true;
-    return ctx.reply('✅ Anti-Link telah *diaktifkan*.', { parse_mode: 'Markdown' });
+    data.antiLink = true;
+    saveData();
+    ctx.reply('✅ Anti-Link diaktifkan.');
   } else if (arg === 'off') {
-    antiLinkOn = false;
-    return ctx.reply('❌ Anti-Link telah *dimatikan*.', { parse_mode: 'Markdown' });
+    data.antiLink = false;
+    saveData();
+    ctx.reply('❌ Anti-Link dimatikan.');
   } else {
-    return ctx.reply('Gunakan format: /antilink on atau /antilink off');
+    ctx.reply('Format: /antilink on atau /antilink off');
   }
 });
 
-// Deteksi pesan yang mengandung link
-bot.on('message', async (ctx) => {
-  if (!antiLinkOn) return;
+// /izinkan
+bot.command('izinkan', (ctx) => {
+  const chatId = ctx.chat.id;
+  if (!data.allowedGroups.includes(chatId)) {
+    data.allowedGroups.push(chatId);
+    saveData();
+    ctx.reply('✅ Grup ini sekarang diizinkan memakai Anti-Link.');
+  } else {
+    ctx.reply('✅ Grup ini sudah diizinkan sebelumnya.');
+  }
+});
 
+// /wl @username
+bot.command('wl', (ctx) => {
+  const username = ctx.message.text.split(' ')[1];
+  if (!username) return ctx.reply('Format: /wl @username');
+  if (!data.whitelist.includes(username)) {
+    data.whitelist.push(username);
+    saveData();
+    ctx.reply(`✅ ${username} telah di-whitelist.`);
+  } else {
+    ctx.reply(`ℹ️ ${username} sudah ada di whitelist.`);
+  }
+});
+
+// /unwl @username
+bot.command('unwl', (ctx) => {
+  const username = ctx.message.text.split(' ')[1];
+  if (!username) return ctx.reply('Format: /unwl @username');
+  data.whitelist = data.whitelist.filter(u => u !== username);
+  saveData();
+  ctx.reply(`❌ ${username} dihapus dari whitelist.`);
+});
+
+// /setdomain
+bot.command('setdomain', (ctx) => {
+  const domains = ctx.message.text.split(' ').slice(1);
+  if (domains.length === 0) return ctx.reply('Format: /setdomain domain1.com domain2.com');
+  data.domains = domains;
+  saveData();
+  ctx.reply(`🌐 Domain yang akan diblokir:\n${domains.join('\n')}`);
+});
+
+// Anti-link handler
+bot.on('message', async (ctx) => {
+  if (!data.antiLink) return;
+  if (!data.allowedGroups.includes(ctx.chat.id)) return;
+
+  const fromUsername = ctx.from.username ? '@' + ctx.from.username : ctx.from.first_name;
+  const isWhitelisted = data.whitelist.includes('@' + ctx.from.username);
   const text = ctx.message.text || '';
+
+  // Cek link
+  const domainMatch = data.domains.some(domain => text.includes(domain));
   const linkRegex = /(https?:\/\/|t\.me\/|telegram\.me\/|www\.)\S+/i;
 
-  if (linkRegex.test(text)) {
+  if ((domainMatch || linkRegex.test(text)) && !isWhitelisted) {
     try {
       await ctx.deleteMessage();
-      console.log(`🔗 Pesan dihapus dari ${ctx.from.username || ctx.from.first_name}`);
+      fs.appendFileSync('link-log.txt', `[${new Date().toLocaleString()}] ${fromUsername}: ${text}\n`);
+      console.log(`❌ Dihapus: ${fromUsername}`);
     } catch (err) {
-      console.error('Gagal menghapus pesan:', err.message);
+      console.error('⚠️ Gagal hapus:', err.message);
     }
   }
 });
 
-// Mulai bot
+// Run bot
 bot.launch().then(() => {
-  console.log('🤖 Bot Anti-Link siap digunakan!');
+  console.log('🚀 Bot Anti-Link Pro Siap Tempur!');
 });
