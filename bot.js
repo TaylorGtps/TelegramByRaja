@@ -1,33 +1,21 @@
 const { Telegraf } = require('telegraf');
-const fs = require('fs');
-const path = require('path');
 
-// Ganti token ini dengan milik kamu
+// Ganti token dengan token milik kamu
 const bot = new Telegraf('7991511524:AAE1ReD73oQ7p8MRhLtj8UQZf8FxTA1OeG0');
 
-// File untuk data konfigurasi
-const dataPath = path.join(__dirname, 'data.json');
-
-// Muat data atau buat default
-let data = {
+// Data disimpan langsung di dalam kode (RAM)
+const data = {
   allowedGroups: [],
   whitelist: [],
-  blockedDomains: ['t.me', 'bit.ly']
+  blockedDomains: ['t.me', 'bit.ly', 'tinyurl.com', 'discord.gg'],
 };
 
-if (fs.existsSync(dataPath)) {
-  data = JSON.parse(fs.readFileSync(dataPath));
-}
-
-function saveData() {
-  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
-}
-
-// Regex deteksi link
+// Deteksi link
 const linkRegex = /(?:https?:\/\/)?(?:www\.)?[^\s]+\.[^\s]+/i;
 
+// Perintah awal
 bot.start((ctx) => {
-  ctx.reply('✅ Bot Anti-Link aktif dan akan memberi notifikasi saat menghapus pesan.');
+  ctx.reply('✅ Bot Anti-Link aktif.\nPesan berisi link akan otomatis dihapus dan diberi notifikasi.');
 });
 
 // Perintah izinkan grup
@@ -35,75 +23,65 @@ bot.command('izinkan', (ctx) => {
   const chatId = ctx.chat.id;
   if (!data.allowedGroups.includes(chatId)) {
     data.allowedGroups.push(chatId);
-    saveData();
     ctx.reply('✅ Grup ini sekarang menggunakan sistem anti-link.');
   } else {
-    ctx.reply('ℹ️ Grup ini sudah aktif anti-link.');
+    ctx.reply('ℹ️ Grup ini sudah diizinkan.');
   }
 });
 
-// Perintah whitelist
+// Tambah ke whitelist user
 bot.command('wl', (ctx) => {
   const username = ctx.message.text.split(' ')[1];
   if (!username) return ctx.reply('⚠️ Format: /wl @username');
   if (!data.whitelist.includes(username)) {
     data.whitelist.push(username);
-    saveData();
     ctx.reply(`✅ ${username} ditambahkan ke whitelist.`);
   } else {
-    ctx.reply('ℹ️ Username sudah di whitelist.');
+    ctx.reply('ℹ️ Sudah di-whitelist.');
   }
 });
 
-// Un-whitelist
+// Hapus dari whitelist
 bot.command('unwl', (ctx) => {
   const username = ctx.message.text.split(' ')[1];
   if (!username) return ctx.reply('⚠️ Format: /unwl @username');
   data.whitelist = data.whitelist.filter(u => u !== username);
-  saveData();
   ctx.reply(`❌ ${username} dihapus dari whitelist.`);
 });
 
-// Tambahkan domain blok
+// Tambah domain terblokir
 bot.command('setdomain', (ctx) => {
   const domain = ctx.message.text.split(' ')[1];
   if (!domain) return ctx.reply('⚠️ Format: /setdomain domain.com');
   if (!data.blockedDomains.includes(domain)) {
     data.blockedDomains.push(domain);
-    saveData();
-    ctx.reply(`✅ Domain ${domain} ditambahkan ke daftar blokir.`);
+    ctx.reply(`✅ Domain ${domain} ditambahkan ke blok list.`);
   } else {
-    ctx.reply('ℹ️ Domain sudah ada dalam daftar blokir.');
+    ctx.reply('ℹ️ Domain sudah diblok.');
   }
 });
 
-// Deteksi dan hapus pesan link
+// Deteksi pesan
 bot.on('message', async (ctx) => {
   const chatId = ctx.chat.id;
+  const text = ctx.message.text || ctx.message.caption || '';
+  const fromUsername = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+
   if (!data.allowedGroups.includes(chatId)) return;
 
-  const fromUsername = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
   const isWhitelisted = data.whitelist.includes(`@${ctx.from.username}`);
-  const text = ctx.message.text || ctx.message.caption || '';
+  const domainDetected = data.blockedDomains.some(domain => text.includes(domain));
 
-  const domainMatch = data.blockedDomains.some(d => text.includes(d));
-  if ((domainMatch || linkRegex.test(text)) && !isWhitelisted) {
+  if ((domainDetected || linkRegex.test(text)) && !isWhitelisted) {
     try {
       await ctx.deleteMessage();
-
-      // Kirim notifikasi ke grup
       await ctx.reply(`❌ Pesan dari ${fromUsername} telah dihapus karena mengandung link.`);
-
-      // Log ke file
-      fs.appendFileSync(
-        'link-log.txt',
-        `[${new Date().toLocaleString()}] ${fromUsername} dihapus di ${ctx.chat.title}: ${text}\n`
-      );
+      console.log(`[LOG] ${fromUsername}: ${text}`);
     } catch (err) {
-      console.error('❗ Gagal menghapus pesan:', err.message);
+      console.error('❗ Gagal hapus pesan:', err.message);
     }
   }
 });
 
 bot.launch();
-console.log('🤖 Bot Anti-Link berjalan dan notifikasi ON secara default!');
+console.log('🤖 Bot Anti-Link aktif sepenuhnya di mode notif!');
